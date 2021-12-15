@@ -4,7 +4,7 @@
 # Used to provide DDNS service for my home
 # Needs the DNS record pre-creating on Cloudflare
 
-# ********* To make executable: chmod +x ddns_update.sh *********
+# ********* To make executable: chmod +x cloudflare_ddns_update.sh *********
 
 # Cloudflare zone is the zone which holds the record
 ZONE="example.com"
