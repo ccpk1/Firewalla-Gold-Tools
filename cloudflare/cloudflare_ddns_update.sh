@@ -17,7 +17,7 @@ CLOUDFLARE_API_TOKEN="<ENTER TOKEN>"
 # Specify interface for curl if multi wan otherwise just leave leave empty quotes
 INTERFACE="--interface eth0"
 # Number of lines in the log file before trunking
-LOG_LIMIT=2000
+LOG_LIMIT=2500
 
 # ** Update Home Assistant - Uncomment the Home Assistant lines here and below if you want to notify HA of external IP updates
 #URL="https://ha.example.com/api/webhook/set_wan_one_ip"
