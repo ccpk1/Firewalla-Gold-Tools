@@ -1,0 +1,158 @@
+## This can be used to remotely run the speedtest-cli binary on your firewalla (or other linux system). Results then captured back in home assistant.
+
+## Prerequisites:
+## Setup SSH keys between home assistant and firewalla to allow secure connection
+## Copy the speedtest-cli binary into the "/home/pi/ccpk_tools/speedtest/" directory or another directory of your choice - https://www.speedtest.net/apps/cli
+## Copy this yaml below into your home assistant configuration.  Easiest way is if you use a "packages" folder, you can drop file this in as is.
+## Create a secrets.yaml file file with your "!secret" command strings.  This isn't required, just a good habit.  As you can see, there is nothing overly private in mine, but you may need to adjust slightly for your configuration and keys
+##    speedtest_wan_one: ssh -i /config/ssh/id_rsa_firewalla -o 'StrictHostKeyChecking=no' pi@fire.walla '/home/pi/ccpk_tools/speedtest/speedtest --interface=eth0 --server-id=24678 --format=json-pretty'
+##    speedtest_wan_two: ssh -i /config/ssh/id_rsa_firewalla -o 'StrictHostKeyChecking=no' pi@fire.walla '/home/pi/ccpk_tools/speedtest/speedtest --interface=eth1 --server-id=24678 --format=json-pretty'
+
+sensor:
+  ###################################  Speedtest  #####################################
+  - platform: command_line
+    name: speedtest_wan_one_json
+    command: !secret speedtest_wan_one
+    scan_interval: 99999  #This long scan interval will prevent the speedtest from running.  It will only run when called from automation
+    command_timeout: 60
+    value_template: >
+      {{ 
+        {
+          "jitter" : value_json.ping.jitter,
+          "latency" : value_json.ping.latency,
+          "download" : value_json.download.bandwidth,
+          "upload" : value_json.upload.bandwidth,
+          "packetLoss" : value_json.packetLoss,
+          "isp" : value_json.isp,
+          "externalIp" : value_json.interface.externalIp,
+          "server-id" : value_json.server.id,
+          "server-host" : value_json.server.host
+        } | tojson
+      }}
+  - platform: command_line
+    name: speedtest_wan_two_json
+    command: !secret speedtest_wan_two
+    scan_interval: 99999
+    command_timeout: 60
+    value_template: >
+      {{ 
+        {
+          "jitter" : value_json.ping.jitter,
+          "latency" : value_json.ping.latency,
+          "download" : value_json.download.bandwidth,
+          "upload" : value_json.upload.bandwidth,
+          "packetLoss" : value_json.packetLoss,
+          "isp" : value_json.isp,
+          "externalIp" : value_json.interface.externalIp,
+          "server-id" : value_json.server.id,
+          "server-host" : value_json.server.host
+        } | tojson
+      }}
+
+template:
+  - sensor:
+      - name: Speedtest WAN-ONE Jitter
+        unit_of_measurement: "ms"
+        state_class: measurement
+        state: "{{ (states('sensor.speedtest_wan_one_json')|from_json()).jitter | float(0) | round(1) }}"
+      - name: Speedtest WAN-ONE Latency
+        unit_of_measurement: "ms"
+        state_class: measurement
+        state: "{{ (states('sensor.speedtest_wan_one_json')|from_json()).latency | float(0) | round(1) }}"
+      - name: Speedtest WAN-ONE Packet Loss
+        state: "{{ (states('sensor.speedtest_wan_one_json')|from_json()).packetLoss | float(0) | round(1) }}"
+        state_class: measurement
+      - name: Speedtest WAN-ONE Download
+        unit_of_measurement: "Mbit/s"
+        state_class: measurement
+        icon: mdi:download
+        state: "{{ ((states('sensor.speedtest_wan_one_json')|from_json()).download | int(0) / 125000) | float(0) | round(1) }}"
+      - name: Speedtest WAN-ONE Upload
+        unit_of_measurement: "Mbit/s"
+        state_class: measurement
+        icon: mdi:upload
+        state: "{{ ((states('sensor.speedtest_wan_one_json')|from_json()).upload | int(0) / 125000) | float(0) | round(1) }}"
+      - name: Speedtest WAN-ONE ISP
+        state: "{{ (states('sensor.speedtest_wan_one_json')|from_json()).isp }}"
+      - name: Speedtest WAN-ONE externalIP
+        state: "{{ (states('sensor.speedtest_wan_one_json')|from_json()).externalIp }}"
+      - name: Speedtest WAN-TWO Jitter
+        unit_of_measurement: "ms"
+        state_class: measurement
+        state: "{{ (states('sensor.speedtest_wan_two_json')|from_json()).jitter | float(0) | round(1) }}"
+      - name: Speedtest WAN-TWO Latency
+        unit_of_measurement: "ms"
+        state_class: measurement
+        state: "{{ (states('sensor.speedtest_wan_two_json')|from_json()).latency | float(0) | round(1) }}"
+      - name: Speedtest WAN-TWO Packet Loss
+        state_class: measurement
+        state: "{{ (states('sensor.speedtest_wan_two_json')|from_json()).packetLoss | float(0) | round(1) }}"
+      - name: Speedtest WAN-TWO Download
+        unit_of_measurement: "Mbit/s"
+        state_class: measurement
+        icon: mdi:download
+        state: "{{ ((states('sensor.speedtest_wan_two_json')|from_json()).download | int(0) / 125000) | float(0) | round(1) }}"
+      - name: Speedtest WAN-TWO Upload
+        unit_of_measurement: "Mbit/s"
+        state_class: measurement
+        icon: mdi:upload
+        state: "{{ ((states('sensor.speedtest_wan_two_json')|from_json()).upload | int(0) / 125000) | float(0) | round(1) }}"
+      - name: Speedtest WAN-TWO ISP
+        state: "{{ (states('sensor.speedtest_wan_two_json')|from_json()).isp }}"
+      - name: Speedtest WAN-TWO externalIP
+        state: "{{ (states('sensor.speedtest_wan_two_json')|from_json()).externalIp }}"
+
+automation:
+  - alias: Internet Speedtest
+    description: "Run internet speedtest on schedule"
+    trigger:
+      - platform: time_pattern
+        hours: "/4"
+    action:
+      # WAN-ONE
+      - service: homeassistant.update_entity
+        target:
+          entity_id: sensor.speedtest_wan_one_json
+      - wait_template: >-
+          {{ (as_timestamp(now()) -
+          as_timestamp(states.sensor.speedtest_wan_one_json.last_changed)) | int(0) < 300 }}
+        continue_on_timeout: true
+        timeout: "300"
+      - choose:
+          - conditions:
+              - condition: template
+                #Check that the speedtest recently completed and that the upload and download speed were within speed parameters (300MB/25MB), otherwise perform another test
+                value_template: >-
+                  {{ (as_timestamp(now()) -
+                  as_timestamp(states.sensor.speedtest_wan_one_json.last_changed)) | int(0)
+                  < 300 and (states('sensor.speedtest_wan_one_download') | int(0) < 300 or
+                  states('sensor.speedtest_wan_one_upload') | int(0) < 25) }}
+            sequence:
+              - service: homeassistant.update_entity
+                target:
+                  entity_id: sensor.speedtest_wan_one_json
+        default: []
+        # WAN-TWO
+      - service: homeassistant.update_entity
+        target:
+          entity_id: sensor.speedtest_wan_two_json
+      - wait_template: >-
+          {{ (as_timestamp(now()) -
+          as_timestamp(states.sensor.speedtest_wan_two_json.last_changed)) | int(0) < 300 }}
+        continue_on_timeout: true
+        timeout: "300"
+      - choose:
+          - conditions:
+              - condition: template
+                #Check that the speedtest recently completed and that the upload and download speed within speed parameters (300MB/25MB), otherwise perform another test
+                value_template: >-
+                  {{ (as_timestamp(now()) -
+                  as_timestamp(states.sensor.speedtest_wan_two_json.last_changed)) | int(0)
+                  < 300 and (states('sensor.speedtest_wan_two_download') | int(0) < 300 or
+                  states('sensor.speedtest_wan_two_upload') | int(0) < 25) }}
+            sequence:
+              - service: homeassistant.update_entity
+                target:
+                  entity_id: sensor.speedtest_wan_two_json
+        default: []
+    mode: single
